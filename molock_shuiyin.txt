@@ -1,0 +1,91 @@
+-- config start
+property bucket : (system attribute "bucket")
+property bucketDomain : (system attribute "bucketDomain")
+property AccessKey : (system attribute "AccessKey")
+property SecretKey : (system attribute "SecretKey")
+-- config end
+
+-- md5(date) as file name
+set fileName to do shell script "date \"+%Y%m%d%H%M%S\" | md5"
+
+-- see if clipboard is a file
+set filePath to ""
+try
+    set clipPath to the clipboard as «class furl»
+    set filePath to clipPath as alias
+    -- like "/Users/jverson/Pictures/igarss/IMG_20140720_221838.jpg"
+    set filePath to quoted form of POSIX path of filePath
+    set filePath to second item of my theSplit(filePath, "'")
+    set tempArray to my theSplit(filePath, ".")
+    -- like "jpg" or "png" or "gif" or "mp4"
+    set fileType to last item of tempArray
+end try
+
+if filePath is not "" then
+    set fileName to fileName & "." & fileType
+    set markdownUrl to my upload(fileName, filePath, fileType)
+    return markdownUrl --end
+end if
+
+
+-- see if clipboard is image data
+set jpegDATA to ""
+try
+    set jpegDATA to the clipboard as JPEG picture
+end try
+if jpegDATA is not "" then
+    set tempPath to "/tmp/"
+    set fileName to fileName & ".jpg"
+    set filePath to tempPath & fileName
+    set theFile to open for access filePath with write permission
+    write jpegDATA to theFile
+    close access theFile
+    set markdownUrl to my upload(fileName, filePath, "jpg")
+    -- delete temp file
+    do shell script "rm " & filePath
+    return markdownUrl
+end if
+
+beep 1
+display dialog ¬
+    "No file or image data found on the clipboard." with icon ¬
+    note buttons {"Whatever"} default button 1
+return
+
+-- string split function
+-- ref: http://erikslab.com/2007/08/31/applescript-how-to-split-a-string/
+on theSplit(theString, theDelimiter)
+    -- save delimiters to restore old settings
+    set oldDelimiters to AppleScript's text item delimiters
+    -- set delimiters to delimiter to be used
+    set AppleScript's text item delimiters to theDelimiter
+    -- create the array
+    set theArray to every text item of theString
+    -- restore the old setting
+    set AppleScript's text item delimiters to oldDelimiters
+    -- return the result
+    return theArray
+end theSplit
+
+-- upload image to qiniu
+on upload(fileName, filePath, fileType)
+    -- compress image todo..
+
+    -- qiniu account set
+    set account_commond to "/usr/local/bin/qshell account " & AccessKey & " " & SecretKey
+    do shell script account_commond
+    -- upload to qiniu
+    set upload_command to "/usr/local/bin/qshell fput " & bucket & " " & fileName & " " & filePath
+    do shell script upload_command
+    -- strcat url
+    set resourceUrl to bucketDomain & fileName
+    if (fileType is "png") or (fileType is "jpg") or (fileType is "gif") or (fileType is "bmp") or (fileType is "jpeg") then
+        set markdownUrl to "![](" & resourceUrl
+        return markdownUrl & "?imageView2/0/q/75|watermark/2/text/d3d3Lm1vbG9jay5jbg==/font/Y29uc29sYXM=/fontsize/480/fill/I0ZCRkJGQg==/dissolve/100/gravity/SouthEast/dx/5/dy/5|imageslim)"
+    else
+        return resourceUrl
+    end if
+
+end upload
+
+-- ref:https://discussions.apple.com/thread/2379870?start=0&tstart=0
